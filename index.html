@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PdfIfolioMaker</title>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600&family=Kanit:wght@400;600&family=Sarabun:wght@400;600&family=Mitr:wght@400;600&family=Noto+Sans+Thai:wght@400;600&family=IBM+Plex+Sans+Thai:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root { --ui-bg:#f4f5f7; --ui-panel:#fff; --ui-line:#e3e5e8; --ui-text:#1f2328; --ui-muted:#6b7280; --ui-accent:#4f46e5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ui-bg:#16181c; --ui-panel:#1f2228; --ui-line:#2f333b; --ui-text:#e6e8eb; --ui-muted:#9aa1ab; --ui-accent:#818cf8; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; height:100vh; display:grid; grid-template-columns:220px 380px 1fr; font-family:Prompt, sans-serif; background:var(--ui-bg); color:var(--ui-text); font-size:14px; }
+  aside, #editor, main { overflow:auto; padding:16px; }
+  aside, #editor { background:var(--ui-panel); border-right:1px solid var(--ui-line); }
+  h3 { margin:18px 0 8px; font-size:13px; text-transform:uppercase; color:var(--ui-muted); }
+  button, .btn { font:inherit; padding:6px 10px; border:1px solid var(--ui-line); background:var(--ui-panel); color:var(--ui-text); border-radius:6px; cursor:pointer; }
+  button.primary { background:var(--ui-accent); color:#fff; border-color:transparent; width:100%; padding:10px; }
+  button:disabled { opacity:.5; cursor:wait; }
+  label { display:block; margin-bottom:8px; color:var(--ui-muted); font-size:12px; }
+  input:not([type=file]):not([type=color]), textarea, select { display:block; width:100%; margin-top:3px; font:inherit; padding:6px 8px; border:1px solid var(--ui-line); border-radius:6px; background:var(--ui-bg); color:var(--ui-text); }
+  textarea { min-height:60px; resize:vertical; }
+  .row { display:flex; gap:8px; align-items:end; }
+  .row > * { flex:1; }
+  input[type=color] { width:100%; height:32px; border:none; background:none; padding:0; }
+  #list { list-style:none; padding:0; margin:12px 0 0; }
+  #list li { padding:8px; border-radius:6px; cursor:pointer; display:grid; grid-template-columns:1fr auto; gap:0 4px; }
+  #list li.on { background:var(--ui-bg); outline:1px solid var(--ui-accent); }
+  #list small { color:var(--ui-muted); font-size:11px; }
+  #list button { grid-row:span 2; padding:2px 6px; border:none; }
+  .pg { border:1px solid var(--ui-line); border-radius:8px; padding:10px; margin-bottom:10px; }
+  .pg-head { display:flex; gap:4px; align-items:center; margin-bottom:8px; }
+  .pg-head b { flex:1; }
+  .pg-head button { padding:2px 8px; }
+  .thumbs { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:8px 0; }
+  .thumb { position:relative; aspect-ratio:1; background:var(--ui-bg) center/contain no-repeat; border-radius:4px; }
+  .thumb.low::before { content:'ความละเอียดต่ำ กด ⟳ อัปโหลดใหม่'; position:absolute; inset:0 0 auto 0; padding:2px 4px; font-size:10px; line-height:1.3; background:#dc2626e6; color:#fff; border-radius:4px 4px 0 0; }
+  .thumb .tools { position:absolute; inset:auto 0 0 0; display:flex; justify-content:center; gap:2px; background:#000a; border-radius:0 0 4px 4px; }
+  .thumb .tools > * { padding:0 5px; border:none; background:none; color:#fff; font-size:12px; cursor:pointer; }
+  .file { display:inline-block; }
+  .file input { display:none; }
+  #status { margin-top:8px; font-size:12px; color:var(--ui-muted); min-height:1em; }
+  #hint { font-size:12px; color:var(--ui-muted); }
+
+  /* ---- document pages (exported as-is, so no UI theme vars here) ---- */
+  .sheet { width:794px; margin:0 auto 24px; box-shadow:0 2px 12px #0003; }
+  .page { width:794px; height:1123px; position:relative; overflow:hidden; display:flex; flex-direction:column; padding:44px 48px 32px; background:var(--bg); color:var(--text); font-family:var(--font), sans-serif; }
+  .page .head { border-left:3px solid var(--accent); padding-left:12px; margin-bottom:14px; }
+  .page h1 { margin:0; font-size:22px; font-weight:600; line-height:1.4; }
+  .page h2 { margin:0; font-size:16px; font-weight:600; color:var(--accent); }
+  .page .desc { margin:2px 0 0; font-size:13px; line-height:1.6; opacity:.75; white-space:pre-wrap; }
+  .page .grid { flex:1; min-height:0; display:grid; gap:10px; grid-auto-rows:1fr; }
+  .page .ph { background:center/contain no-repeat; }
+  .page .grid.auto { display:block; position:relative; }
+  .page .grid.auto .ph { position:absolute; background-size:cover; border-radius:6px; }
+  .page footer { display:flex; justify-content:space-between; margin-top:12px; font-size:10px; opacity:.45; }
+
+  @media (max-width: 1000px) {
+    body { grid-template-columns:1fr; height:auto; }
+    aside, #editor { border-right:none; border-bottom:1px solid var(--ui-line); }
+    main { overflow-x:auto; }
+  }
+</style>
+</head>
+<body>
+<aside>
+  <button class="primary" id="newBtn">+ โปรเจกต์ใหม่</button>
+  <ul id="list"></ul>
+  <p id="hint">บันทึกอัตโนมัติในเบราว์เซอร์นี้เท่านั้น</p>
+</aside>
+<section id="editor"></section>
+<main>
+  <div style="max-width:794px;margin:0 auto 16px">
+    <button class="primary" id="exportBtn">ดาวน์โหลด PDF (ไม่เกิน 5MB)</button>
+    <div id="status"></div>
+  </div>
+  <div id="preview"></div>
+</main>
+
+<script>
+const LIMIT = 4.8 * 1024 * 1024; // headroom under the 5MB upload cap
+const FONTS = ['Prompt', 'Kanit', 'Sarabun', 'Mitr', 'Noto Sans Thai', 'IBM Plex Sans Thai'];
+const $ = s => document.querySelector(s);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const swap = (a, x, y) => { if (y >= 0 && y < a.length) [a[x], a[y]] = [a[y], a[x]]; };
+
+const newPage = () => ({ id: uid(), title: '', desc: '', cols: 'auto', images: [] });
+const newProject = () => ({
+  id: uid(), name: 'Portfolio ใหม่', owner: '', subtitle: '', updated: Date.now(),
+  font: 'Prompt', color: '#4f46e5', bg: '#ffffff', text: '#1f2937', pages: [newPage()],
+});
+
+// ---- IndexedDB (images are too big for localStorage) ----
+let db, cur, saveT;
+const idb = (mode, fn) => new Promise((res, rej) => {
+  const tx = db.transaction('projects', mode), r = fn(tx.objectStore('projects'));
+  tx.oncomplete = () => res(r.result);
+  tx.onerror = () => rej(tx.error);
+});
+async function save() {
+  clearTimeout(saveT); saveT = null;
+  try { await idb('readwrite', s => s.put(cur)); renderList(); }
+  catch (err) { alert('บันทึกไม่สำเร็จ (พื้นที่เบราว์เซอร์อาจเต็ม): ' + err.message); }
+}
+
+// Cap uploads at 3000px / high-quality JPEG: sharp enough for small text and QR codes,
+// export re-encodes per photo to whatever fits the 5MB limit.
+function shrink(file, max = 4000) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); // PNG transparency -> white, not black
+      g.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(img.src);
+      res(c.toDataURL('image/jpeg', 0.95));
+    };
+    img.onerror = () => rej(new Error('อ่านรูปไม่ได้: ' + file.name));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// ---- rendering ----
+async function renderList() {
+  const all = await idb('readonly', s => s.getAll()); // ponytail: loads every image too; fine for dozens of projects
+  all.sort((a, b) => b.updated - a.updated);
+  $('#list').innerHTML = all.map(p => `
+    <li data-id="${p.id}" class="${p.id === cur?.id ? 'on' : ''}">
+      <span>${esc(p.name || 'ไม่มีชื่อ')}</span>
+      <button data-del="${p.id}" title="ลบ">✕</button>
+      <small>${new Date(p.updated).toLocaleString('th-TH')}</small>
+    </li>`).join('');
+  return all;
+}
+
+function renderEditor() {
+  const p = cur;
+  const fontOpts = FONTS.map(f => `<option ${f === p.font ? 'selected' : ''}>${f}</option>`).join('');
+  $('#editor').innerHTML = `
+    <h3>หัวเรื่อง (หน้าแรก)</h3>
+    <label>ชื่อผลงาน / การแข่งขัน<input data-k="name" value="${esc(p.name)}" placeholder="เช่น CoE@PSU Capture The Flag"></label>
+    <label>บริบทสั้น ๆ 1 บรรทัด<input data-k="subtitle" value="${esc(p.subtitle)}" placeholder="เช่น รองชนะเลิศอันดับ 2 · 16 ส.ค. 2026"></label>
+    <label>ชื่อ-นามสกุล (แสดงที่ท้ายหน้า)<input data-k="owner" value="${esc(p.owner)}"></label>
+    <h3>ธีม</h3>
+    <label>ฟอนต์<select data-k="font">${fontOpts}</select></label>
+    <div class="row">
+      <label>สีหลัก<input type="color" data-k="color" value="${p.color}"></label>
+      <label>พื้นหลัง<input type="color" data-k="bg" value="${p.bg}"></label>
+      <label>ตัวอักษร<input type="color" data-k="text" value="${p.text}"></label>
+    </div>
+    <h3>หน้าเนื้อหา</h3>
+    ${p.pages.map((pg, i) => `
+      <div class="pg">
+        <div class="pg-head">
+          <b>หน้า ${i + 1}</b>
+          <button data-act="up" data-i="${i}" title="เลื่อนขึ้น">↑</button>
+          <button data-act="down" data-i="${i}" title="เลื่อนลง">↓</button>
+          <button data-act="delpage" data-i="${i}" title="ลบหน้า">✕</button>
+        </div>
+        <label>หัวข้อ (ไม่ใส่ก็ได้)<input data-i="${i}" data-k="title" value="${esc(pg.title)}" placeholder="เช่น เกียรติบัตร, บรรยากาศการแข่งขัน"></label>
+        <label>คำอธิบายสั้น ๆ (ไม่ใส่ก็ได้)<input data-i="${i}" data-k="desc" value="${esc(pg.desc)}"></label>
+        <label>การจัดรูป<select data-i="${i}" data-k="cols">
+          ${[['auto', 'อัตโนมัติ (จัดเต็มหน้า ตามสัดส่วนรูป)'], [1, 'ตาราง 1 คอลัมน์'], [2, 'ตาราง 2 คอลัมน์'], [3, 'ตาราง 3 คอลัมน์']]
+            .map(([v, t]) => `<option value="${v}" ${v === pg.cols ? 'selected' : ''}>${t}</option>`).join('')}
+        </select></label>
+        <div class="thumbs">
+          ${pg.images.map((src, j) => `
+            <div class="thumb" data-i="${i}" data-j="${j}" style="background-image:url(${src})">
+              <div class="tools">
+                <button data-act="left" data-i="${i}" data-j="${j}" title="เลื่อนซ้าย">◀</button>
+                <label title="เปลี่ยนรูป">⟳<input type="file" accept="image/*" data-act="replace" data-i="${i}" data-j="${j}" hidden></label>
+                <button data-act="delimg" data-i="${i}" data-j="${j}" title="ลบรูป">✕</button>
+                <button data-act="right" data-i="${i}" data-j="${j}" title="เลื่อนขวา">▶</button>
+              </div>
+            </div>`).join('')}
+        </div>
+        <label class="file btn">+ เพิ่มรูป<input type="file" accept="image/*" multiple data-act="add" data-i="${i}"></label>
+      </div>`).join('')}
+    <button data-act="addpage" style="width:100%">+ เพิ่มหน้า</button>`;
+  // flag photos too small for readable text/QR (e.g. uploaded before the quality fix) so they get replaced
+  ed.querySelectorAll('.thumb').forEach(async t => {
+    const im = await imgOf(cur.pages[t.dataset.i]?.images[t.dataset.j]);
+    if (im && Math.max(im.width, im.height) < 2000) t.classList.add('low');
+  });
+}
+
+function renderPreview() {
+  const p = cur, pv = $('#preview'), total = p.pages.length;
+  pv.style.cssText = `--accent:${p.color};--bg:${p.bg};--text:${p.text};--font:'${p.font}'`;
+  const head = (h, d) => h || d ? `<div class="head">${h}${d ? `<p class="desc">${esc(d)}</p>` : ''}</div>` : '';
+  pv.innerHTML = p.pages.map((pg, i) => `
+    <div class="sheet"><div class="page">
+      ${i === 0 ? head(p.name ? `<h1>${esc(p.name)}</h1>` : '', p.subtitle) : ''}
+      ${head(pg.title ? `<h2>${esc(pg.title)}</h2>` : '', pg.desc)}
+      <div class="grid ${pg.cols === 'auto' ? 'auto' : ''}" style="grid-template-columns:repeat(${pg.cols},1fr)">
+        ${pg.images.map(src => `<div class="ph" style="background-image:url(${src})"></div>`).join('')}
+      </div>
+      <footer><span>${esc(p.owner)}</span><span>${total > 1 ? `${i + 1} / ${total}` : ''}</span></footer>
+    </div></div>`).join('');
+  layoutDone = layoutAuto(p);
+}
+
+// ---- smart layout: justified rows that keep each photo's real shape ----
+const imgs = new Map();
+const imgOf = src => {
+  if (!imgs.has(src)) imgs.set(src, new Promise(res => {
+    const im = new Image();
+    im.onload = () => res(im);
+    im.onerror = () => res(null);
+    im.src = src;
+  }));
+  return imgs.get(src);
+};
+const ratioOf = async src => { const im = await imgOf(src); return im ? im.width / im.height : 4 / 3; };
+
+// Try every row count; split photos (in order) into rows of similar total width,
+// scale to fit the box, keep the arrangement that covers the most area.
+function justify(rs, W, H, gap) {
+  const n = rs.length, total = rs.reduce((a, b) => a + b, 0);
+  let best = null;
+  for (let k = 1; k <= n; k++) {
+    const rows = [];
+    let row = [], acc = 0;
+    rs.forEach((r, i) => {
+      row.push(i); acc += r;
+      const left = n - i - 1, rowsLeft = k - rows.length - 1;
+      if (rowsLeft > 0 && (left === rowsLeft || acc >= total * (rows.length + 1) / k)) { rows.push(row); row = []; }
+    });
+    rows.push(row);
+    const hs = rows.map(rw => (W - gap * (rw.length - 1)) / rw.reduce((a, i) => a + rs[i], 0));
+    const sumH = hs.reduce((a, b) => a + b, 0), gaps = gap * (rows.length - 1);
+    const s = Math.min(1, (H - gaps) / sumH);
+    const area = s * s * hs.reduce((a, h, j) => a + h * h * rows[j].reduce((b, i) => b + rs[i], 0), 0);
+    if (best && area <= best.area) continue;
+    const boxes = [];
+    let y = (H - sumH * s - gaps) / 2; // center vertically when photos don't fill the height
+    rows.forEach((rw, j) => {
+      const h = hs[j] * s, rowW = rw.reduce((a, i) => a + rs[i] * h, 0) + gap * (rw.length - 1);
+      let x = (W - rowW) / 2;
+      rw.forEach(i => { boxes[i] = { x, y, w: rs[i] * h, h }; x += rs[i] * h + gap; });
+      y += h + gap;
+    });
+    best = { area, boxes };
+  }
+  return best ? best.boxes : [];
+}
+
+let layoutDone = Promise.resolve();
+async function layoutAuto(p) {
+  const grids = document.querySelectorAll('#preview .grid.auto');
+  for (const g of grids) {
+    const phs = [...g.children];
+    const rs = await Promise.all(phs.map(el => ratioOf(el.style.backgroundImage.slice(5, -2))));
+    justify(rs, g.clientWidth, g.clientHeight, 10).forEach((b, i) => {
+      phs[i].style.cssText += `;left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px`;
+    });
+  }
+}
+
+// self-check: every photo placed, nothing outside the box
+{
+  const B = justify([1.5, 0.7, 1, 1.33, 2], 600, 800, 10);
+  console.assert(B.length === 5 && B.every(b => b.x > -0.5 && b.y > -0.5 && b.x + b.w < 600.5 && b.y + b.h < 800.5), 'justify layout broke');
+}
+
+function changed(structural) {
+  cur.updated = Date.now();
+  renderPreview();
+  if (structural) renderEditor();
+  clearTimeout(saveT);
+  saveT = setTimeout(save, 400);
+}
+
+async function open(p) {
+  if (saveT) await save(); // flush pending edits of the previous project
+  cur = p;
+  renderEditor(); renderPreview(); renderList();
+}
+
+// ---- editor events ----
+const ed = $('#editor');
+ed.addEventListener('input', e => {
+  const t = e.target, k = t.dataset.k;
+  if (!k) return;
+  const obj = t.dataset.i != null ? cur.pages[t.dataset.i] : cur;
+  obj[k] = k === 'cols' && t.value !== 'auto' ? +t.value : t.value;
+  changed(false);
+});
+ed.addEventListener('change', async e => {
+  const t = e.target;
+  if (t.type !== 'file' || !t.files.length) return;
+  const { act } = t.dataset, i = +t.dataset.i, j = +t.dataset.j;
+  try {
+    const urls = await Promise.all([...t.files].map(f => shrink(f)));
+    if (act === 'add') cur.pages[i].images.push(...urls);
+    if (act === 'replace') cur.pages[i].images[j] = urls[0];
+    changed(true);
+  } catch (err) { alert(err.message); }
+});
+ed.addEventListener('click', e => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  const { act } = b.dataset, i = +b.dataset.i, j = +b.dataset.j, P = cur.pages;
+  if (act === 'up') swap(P, i, i - 1);
+  if (act === 'down') swap(P, i, i + 1);
+  if (act === 'delpage' && !confirm('ลบหน้านี้?')) return;
+  if (act === 'delpage') P.splice(i, 1);
+  if (act === 'addpage') P.push(newPage());
+  if (act === 'delimg') P[i].images.splice(j, 1);
+  if (act === 'left') swap(P[i].images, j, j - 1);
+  if (act === 'right') swap(P[i].images, j, j + 1);
+  changed(true);
+});
+
+// ---- project list events ----
+$('#newBtn').onclick = async () => { await open(newProject()); await save(); };
+$('#list').addEventListener('click', async e => {
+  const del = e.target.closest('[data-del]')?.dataset.del;
+  if (del) {
+    if (!confirm('ลบโปรเจกต์นี้ถาวร?')) return;
+    if (del === cur.id) { clearTimeout(saveT); saveT = null; }
+    await idb('readwrite', s => s.delete(del));
+    if (del === cur.id) {
+      const [next] = await renderList();
+      await open(next || newProject());
+      if (!next) await save();
+    } else renderList();
+    return;
+  }
+  const id = e.target.closest('li')?.dataset.id;
+  if (id && id !== cur.id) open(await idb('readonly', s => s.get(id)));
+});
+
+// ---- export ----
+// Text/decor is rendered as one background image per page; photos are NOT screenshotted,
+// they go into the PDF as their own images at up to 300dpi so small text and QR codes stay sharp.
+const toJpeg = (im, maxPx, q) => {
+  const s = Math.min(1, maxPx / Math.max(im.width, im.height)), c = document.createElement('canvas');
+  c.width = Math.round(im.width * s); c.height = Math.round(im.height * s);
+  c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', q);
+};
+
+$('#exportBtn').onclick = async () => {
+  const btn = $('#exportBtn'), status = $('#status');
+  btn.disabled = true;
+  try {
+    await document.fonts.ready;
+    await layoutDone;
+    status.textContent = 'กำลังเตรียมหน้า...';
+    const pages = [...document.querySelectorAll('#preview .page')], mm = 210 / 794;
+    const bgs = [], photos = [];
+    for (const [i, el] of pages.entries()) {
+      const phs = [...el.querySelectorAll('.ph')], pr = el.getBoundingClientRect();
+      phs.forEach(ph => ph.style.visibility = 'hidden');
+      bgs.push(await html2canvas(el, { scale: 3, backgroundColor: cur.bg }));
+      phs.forEach(ph => ph.style.visibility = '');
+      for (const [j, ph] of phs.entries()) {
+        const im = await imgOf(cur.pages[i].images[j]);
+        if (!im) continue;
+        const b = ph.getBoundingClientRect(), r = im.width / im.height;
+        let w = b.width, h = b.height; // fit the photo inside its box, like background-size:contain
+        if (w / h > r) w = h * r; else h = w / r;
+        photos.push({ i, im, x: (b.left - pr.left + (b.width - w) / 2) * mm, y: (b.top - pr.top + (b.height - h) / 2) * mm, w: w * mm, h: h * mm });
+      }
+    }
+    // Start at the photo's full stored resolution (zoomable in the PDF), only step down if over 5MB.
+    // Each level caps by pixels AND by dpi of the photo's box, so small photos give up detail first.
+    const levels = [[Infinity, Infinity, 0.95, 'เต็มความละเอียด'], [3000, 600, 0.92, '600 dpi'], [2400, 400, 0.88, '400 dpi'],
+      [2000, 300, 0.85, '300 dpi'], [1600, 220, 0.8, '220 dpi'], [1200, 150, 0.72, '150 dpi']];
+    for (const [maxPx, dpi, q, label] of levels) {
+      status.textContent = `กำลังสร้าง PDF (${label})...`;
+      await new Promise(r => setTimeout(r)); // let the status text paint
+      const pdf = new jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true });
+      bgs.forEach((c, i) => {
+        if (i) pdf.addPage();
+        pdf.addImage(c.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, 210, 297);
+        for (const p of photos.filter(p => p.i === i)) {
+          const px = Math.min(maxPx, Math.ceil(Math.max(p.w, p.h) / 25.4 * dpi));
+          pdf.addImage(toJpeg(p.im, px, q), 'JPEG', p.x, p.y, p.w, p.h);
+        }
+      });
+      const blob = pdf.output('blob');
+      if (blob.size <= LIMIT) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = (cur.name || 'portfolio').replace(/[\\/:*?"<>|]/g, '_') + '.pdf';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+        status.textContent = `เสร็จแล้ว: ${(blob.size / 1024 / 1024).toFixed(2)} MB, ${pages.length} หน้า, รูป ${label}`;
+        return;
+      }
+    }
+    status.textContent = 'ไฟล์ยังใหญ่เกิน 5MB: ลองลดจำนวนหน้าหรือรูปลง';
+  } catch (err) {
+    status.textContent = 'ส่งออกไม่สำเร็จ: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+// ---- boot ----
+const req = indexedDB.open('portfolio-maker', 1);
+req.onupgradeneeded = () => req.result.createObjectStore('projects', { keyPath: 'id' });
+req.onerror = () => alert('เบราว์เซอร์นี้ไม่รองรับการบันทึก (IndexedDB)');
+req.onsuccess = async () => {
+  db = req.result;
+  const all = await idb('readonly', s => s.getAll());
+  all.sort((a, b) => b.updated - a.updated);
+  await open(all[0] || newProject());
+  if (!all.length) await save();
+};
+window.addEventListener('beforeunload', () => { if (saveT) save(); });
+</script>
+</body>
+</html>
